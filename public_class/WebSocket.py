@@ -9,7 +9,20 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from Main import Main
 
 
+# connected_clients keeps track of all currently connected clients by their session ID (sid).
+# It maps either:
+# 1. sid (str) -> IP address (str) during basic connection,
+# 2. or username (str) -> { "client": sid, "OTPApp": sid } after device registration.
+# Example:
+# {
+#     "abc123": "192.168.1.100",                      # Before device type registration
+#     "winko": {
+#         "client": "abc123",
+#         "OTPApp": "xyz789"
+#     }
+# }
 connected_clients = {}
+
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", ping_interval=10, ping_timeout=30)
