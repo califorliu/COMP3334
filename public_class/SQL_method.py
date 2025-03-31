@@ -1,6 +1,6 @@
 import mysql
 
-from Config_mysql import get_db_connection
+from .Config_mysql import get_db_connection
 
 
 def getUserByName(username):
@@ -100,3 +100,20 @@ def get_user_and_increaseOTPCounter(user_id):
     
     return newTuple
 
+def execute_query(conn, query, params=None):
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(query, params)
+            return cursor.fetchall()
+    except Exception as e:
+        print(f"❌ Query error: {e}")
+        return None
+
+def execute_insert(conn, query, params=None):
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(query, params)
+            conn.commit()
+    except Exception as e:
+        print(f"❌ Insert error: {e}")
+        conn.rollback()
