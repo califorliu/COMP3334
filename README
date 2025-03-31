@@ -1,0 +1,37 @@
+project/
+│
+├── Main.py                     
+│
+├── public_class/
+│   ├── Config_mysql.py         
+│   ├── Encrypt.py              
+│   ├── SQL_method.py           
+│   ├── WebSocket.py           
+│   ├── OTPApp/
+│   │   ├── OTPApplication.py   
+│   │   └── OTPData.json        
+├── api_client.py             
+├── auth_server.py             
+├── UserManager.py             
+├── key_utils.py               
+├── cli.py                     
+├── command_demo.sh            
+
+
+python3 auth_server.py
+python3 cli_menu.py
+
+User Management Overview
+The user management system provides secure functionality for registration, login, logout, and password reset using a RESTful API and token-based authentication.
+
+Registration
+Users can register by submitting a unique username and password. The password is hashed before being stored in the database for security. If the username already exists, the server will reject the request.
+
+Login
+Users provide their username and password to authenticate. If the credentials are correct, the server generates a session token, which is stored in memory and returned to the client along with the user ID.
+
+Logout
+To log out, the client sends their user ID and token. The server validates the token and, if valid, removes the session data, effectively logging the user out.
+
+Password Reset
+Password reset is only allowed for logged-in users. The client must provide their session token, current password, and a new password. The server validates the session and the original password before securely updating the new hashed password in the database.
