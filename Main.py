@@ -1,4 +1,4 @@
-import Encrypt
+import public_class.Encrypt as Encrypt
 
 import sys
 import os
