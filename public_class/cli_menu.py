@@ -1,6 +1,10 @@
+import os
 import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-API_BASE = "http://localhost:5050"
+API_BASE = "https://localhost:5050"
+cert_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "cert.pem"))
 
 session = {
     "token": None,
@@ -23,13 +27,17 @@ def main_menu():
 def register():
     username = input("Username: ")
     password = input("Password: ")
-    res = requests.post(f"{API_BASE}/register", json={"username": username, "password": password})
+    res = requests.post(f"{API_BASE}/register", json={"username": username, "password": password} ,verify=False)
     print(res.json())
 
 def login():
     username = input("Username: ")
     password = input("Password: ")
-    res = requests.post(f"{API_BASE}/login", json={"username": username, "password": password})
+    res = requests.post(
+        f"{API_BASE}/login",
+        json={"username": username, "password": password},
+        verify=False
+    )
 
     try:
         data = res.json()
@@ -54,7 +62,8 @@ def reset_password():
         "token": session["token"],
         "old_password": old_password,
         "new_password": new_password
-    })
+    }
+    ,verify=False)
 
     try:
         print(res.json())
@@ -68,7 +77,7 @@ def logout():
     if not session["token"]:
         print("❌ You are not logged in.")
         return
-    res = requests.post(f"{API_BASE}/logout", json={"user_id": session["user_id"], "token": session["token"]})
+    res = requests.post(f"{API_BASE}/logout", json={"user_id": session["user_id"], "token": session["token"]} ,verify=False)
     print(res.json())
     session["token"] = None
     session["user_id"] = None
