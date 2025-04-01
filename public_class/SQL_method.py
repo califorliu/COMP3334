@@ -1,6 +1,6 @@
 import mysql
 
-from Config_mysql import get_db_connection
+from .Config_mysql import get_db_connection
 
 
 def getUserByName(username):
@@ -33,12 +33,12 @@ def increaseOTPCounter(username):
 
     try:
         cursor = conn.cursor()
-        query = "UPDATE users SET counter = counter + 1 WHERE username = %s"
+        query = "UPDATE users SET OTP_counter = OTP_counter + 1 WHERE username = %s"
         cursor.execute(query, (username,))
         conn.commit()
 
         if cursor.rowcount > 0:
-            print(f"Counter increased for {username}")
+            print(f"OTP_counter increased for {username}")
             return True # indicate successful update
         else:
             print(f" No user found with username: {username}")
@@ -76,27 +76,50 @@ def get_user_and_increaseOTPCounter(user_id):
     conn = get_db_connection()
     cursor = conn.cursor()
 
-   # A SQL statement completes query and increment counter
-    query = """
-        UPDATE users 
-        SET counter = counter + 1 
-        WHERE user_id = %s
-        RETURNING *;
-    """
-    cursor.execute(query, (user_id,))
-    user = cursor.fetchone() # take only one row
-    conn.commit() # save result to database
+    try:
+        update_query = """
+            UPDATE users 
+            SET OTP_counter = OTP_counter + 1 
+            WHERE user_id = %s
+        """
+        cursor.execute(update_query, (user_id,))
+        conn.commit()
 
-    newTuple = ()
-    if user:  # if user is not null or empty
+        select_query = """
+            SELECT * FROM users WHERE user_id = %s
+        """
+        cursor.execute(select_query, (user_id,))
+        user = cursor.fetchone()
 
-        #get secret_key and counter
-        newTuple = (user[5],user[6]) 
-    else:
-        print("❌ No user found!")
+        if user:
+            return user
+        else:
+            print("❌ No user found after update.")
+            return None
 
-    cursor.close()
-    conn.close()
-    
-    return newTuple
+    except mysql.connector.Error as err:
+        print(f"❌ SQL error: {err}")
+        return None
 
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def execute_query(conn, query, params=None):
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(query, params)
+            return cursor.fetchall()
+    except Exception as e:
+        print(f"❌ Query error: {e}")
+        return None
+
+def execute_insert(conn, query, params=None):
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(query, params)
+            conn.commit()
+    except Exception as e:
+        print(f"❌ Insert error: {e}")
+        conn.rollback()

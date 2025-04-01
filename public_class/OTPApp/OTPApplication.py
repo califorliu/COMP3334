@@ -10,15 +10,21 @@ import struct
 
 # from connect to server
 import socketio
+import requests
 
-#connect server
-sio = socketio.Client()
-sio.connect("http://127.0.0.1:3334")
+session = requests.Session()
+session.verify = False
+sio = socketio.Client(http_session=session)
+try:
+    sio.connect("https://127.0.0.1:5050")
+except Exception as e:
+    print("❌ Connection to server failed:", e)
+    sys.exit(1)
 
 
 @sio.event
 def connect():
-    print("Connected to server.")
+    #print("Connected to server.")
     sio.emit("register_device", {"username": "", "device": ""}) 
 
 
@@ -66,26 +72,27 @@ def check_otp_data():
     return True
 
 def bindToAccount():
-    verity_code = input("please input the code you see in desktop client:")
-    
+    verity_code = input("Please input the code you see in desktop client: ").strip()
     deviceID = secrets.token_hex(30)
-    
-    #then send the code to server to verity and get response
-    sio.emit("OTP_bind", {"code": verity_code,"deviceID":deviceID})
-    response = sio.call("OTP_bind", {"code": verity_code})
-    
-    # save the secret_key and user id to a local JSON file if the status is successful.
-    if response and response.get("status") == "success":
-        json_path = os.path.join(os.path.dirname(__file__), "OTPData.json")
-        try:
-            with open(json_path, "w", encoding="utf-8") as file:
-                json.dump({"user_id": response["user_id"], "secret_key": response["secret_key"],
-                            "counter": 0,"deviceID":deviceID}, file, indent=4)
-            print("JSON successfully written to:", json_path)
-        except Exception as e:
-            print("Failed to write JSON:", e)
-    else:
-        print("Sorry, we don't found your code.")
+    try:
+        response = sio.call("OTP_bind", {"code": verity_code, "deviceID": deviceID}, timeout=10)
+        if response and response.get("status") == "success":
+            json_path = os.path.join(os.path.dirname(__file__), "OTPData.json")
+            try:
+                with open(json_path, "w", encoding="utf-8") as file:
+                    json.dump({
+                        "user_id": response["user_id"],
+                        "secret_key": response["secret_key"],
+                        "counter": 0,
+                        "deviceID": deviceID
+                    }, file, indent=4)
+                print("✅ JSON successfully written to:", json_path)
+            except Exception as e:
+                print("❌ Failed to write JSON:", e)
+        else:
+            print("❌ Binding failed:", response.get("message", "Unknown error"))
+    except Exception as e:
+        print("❌ Failed to contact server:", e)
 
 def generateHOTP():
 
@@ -131,7 +138,7 @@ if __name__ == '__main__':
     while(True):
         # if the OTPapp does not register for a account
         if check_otp_data():
-            bindToAccount();
+            bindToAccount()
 
 
         else:
@@ -140,7 +147,7 @@ if __name__ == '__main__':
             if user_choice == "Y":
                 verity()
             else:
-                continue;
+                continue
             
         
     #sys.exit(main())
