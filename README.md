@@ -1,4 +1,4 @@
-.
+```bash
 ├── Encrypt.py
 ├── Main.py
 ├── README
@@ -20,7 +20,7 @@
 │       └── UserX
 │           ├── private.pem
 │           └── public.pem
-
+```
 User Management Overview
 The user management system provides secure functionality for registration, login, logout, and password reset using a RESTful API and token-based authentication.
 
