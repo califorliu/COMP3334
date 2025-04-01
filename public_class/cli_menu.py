@@ -1,7 +1,9 @@
 import os
 import requests
 import urllib3
+import otp_interface
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+import base64
 
 API_BASE = "https://localhost:5050"
 cert_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "cert.pem"))
@@ -21,15 +23,58 @@ def main_menu():
     print("6. View Logs")
     print("7. Reset Password")
     print("8. Logout")
+    print("9. OTP Operations")
     print("0. Exit")
     return input("Choose an option (0-8): ")
+
+def otp_menu():
+    if not otp_interface.is_otp_available():
+        print("❌ OTP system is not integrated.")
+        return
+
+    print("\n=== OTP Menu ===")
+    print("1. Bind to Device")
+    print("2. Generate OTP")
+    print("3. Verify OTP")
+    option = input("Choose: ")
+
+    if option == "1":
+        otp_interface.bind_device()
+    elif option == "2":
+        otp = otp_interface.generate_otp()
+        print("Your OTP:", otp)
+    elif option == "3":
+        user_input = input("Enter OTP: ")
+        if otp_interface.verify_otp(user_input):
+            print("✅ OTP verified!")
+        else:
+            print("❌ OTP invalid!")
 
 def register():
     username = input("Username: ")
     password = input("Password: ")
-    res = requests.post(f"{API_BASE}/register", json={"username": username, "password": password} ,verify=False)
-    print(res.json())
 
+    res = requests.post(f"{API_BASE}/register", json={"username": username, "password": password}, verify=False)
+    data = res.json()
+
+    if data.get("status") == "success":
+        private_key_bytes = base64.b64decode(data["private_key"])
+        public_key_bytes = base64.b64decode(data["public_key"])
+
+        user_dir = os.path.join(os.path.dirname(__file__), "user_keys", username)
+        os.makedirs(user_dir, exist_ok=True)
+
+        with open(os.path.join(user_dir, "private.pem"), "wb") as f:
+            f.write(private_key_bytes)
+
+        with open(os.path.join(user_dir, "public.pem"), "wb") as f:
+            f.write(public_key_bytes)
+
+        print(f"✅ RSA key pair saved to: {user_dir}")
+        print("🆔 One-time binding code:", data["bind_code"])
+    else:
+        print("❌ Registration failed:", data.get("message"))
+        
 def login():
     username = input("Username: ")
     password = input("Password: ")
@@ -101,6 +146,8 @@ def cli_loop():
             reset_password()
         elif option == "8":
             logout()
+        elif option == "9":
+            otp_menu() 
         elif option == "0":
             print("Bye!")
             break
