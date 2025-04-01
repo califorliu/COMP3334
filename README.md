@@ -40,20 +40,27 @@ Password reset is only allowed for logged-in users. The client must provide thei
 
 ## ⚙️ Setup Instructions
 ### 1. Install Requirements
+```bash
 pip install -r requirements.txt
+```
 
 ### 2. Start the Server
-python server.py
 
+```bash
+python server.py
+```
 This will run the Flask server at https://127.0.0.1:5050 with SSL enabled.
 
 ### 3. Run the CLI Client
+```bash
 cd public_class
 python cli_menu.py
+```
 
 ### 4. Run the OTP Application
+```bash
 python OTPApplication.py
-
+```
 ### Example Usage
 Run server.py
 
