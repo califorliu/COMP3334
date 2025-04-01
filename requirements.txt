@@ -1,3 +1,7 @@
-flask
-requests
-python-socketio
+flask==2.3.3
+flask-socketio==5.3.6
+cryptography==42.0.5
+requests==2.31.0
+python-socketio==5.11.2
+eventlet==0.33.3
+pyOpenSSL==24.1.0
