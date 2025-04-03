@@ -2,7 +2,7 @@ import mysql.connector
 
 
 DB_CONFIG = {
-    "host": "database-2.cmh0wekeemzy.us-east-1.rds.amazonaws.com",
+    "host": "192.168.31.189",
     "user": "admin",
     "password": "abcd123456789",
     "database": "comp3334",
