@@ -6,6 +6,7 @@ import hmac
 import hashlib
 import base64
 import struct
+import time
 
 
 # from connect to server
@@ -22,30 +23,32 @@ except Exception as e:
     sys.exit(1)
 
 
+# if it becomes true, it means that the verification has been executed (success or failure).
+isChecked = False
+
+
+
 @sio.event
 def connect():
     #print("Connected to server.")
     sio.emit("register_device", {"username": "", "device": ""}) 
 
 
+
 @sio.on("register_ack")
 def handle_register_ack(data):
     print(f"Registered as {data['device']} successfully!")
 
-# @sio.on("login_otp")
-# def login_otp(OTP):
-#     sio.emit("login_otp", OTP)
-
-# @sio.on("login_ack")
-# def handle_login_ack(data):
-#     print(f"Logged in as {data['username']} successfully!")
-#
+@sio.on("login_ack")
+def handle_login_ack(data):
+    if(data["status"] != "success"): print("Login failed,please make sure your client is opening.")
+    isChecked = True
 
 
-@sio.on("server_message")
-def handle_server_message(data):
-    print(f"📩 Message from server: {data['message']}")
 
+@sio.on("login_totp")
+def login_totp(OTP,user_id):
+    sio.emit("login_totp",{ "OTP":OTP,"user_id":user_id})
 
 
 
@@ -53,9 +56,11 @@ def handle_server_message(data):
 def check_otp_data():
     json_path = os.path.join(os.path.dirname(__file__), "OTPData.json")
 
+    #if no json file
     if not os.path.exists(json_path):
         print("OTPData.json not found!")
-        sys.exit(1)
+        return False
+
 
     with open(json_path, "r", encoding="utf-8") as file:
         try:
@@ -63,22 +68,29 @@ def check_otp_data():
         except json.JSONDecodeError:
             print("OTPData.json is not valid JSON!")
 
-    secret_key = data.get("secret_key", "").strip()
 
+    secret_key = data.get("secret_key", "").strip()
     if not secret_key:
         print("secret_key is missing or empty in OTPData.json!")
         return False
 
+
     return True
+
 
 def bindToAccount():
     verity_code = input("Please input the code you see in desktop client: ").strip()
     deviceID = secrets.token_hex(30)
+
+
     try:
         response = sio.call("OTP_bind", {"code": verity_code, "deviceID": deviceID}, timeout=10)
         if response and response.get("status") == "success":
             json_path = os.path.join(os.path.dirname(__file__), "OTPData.json")
+
+
             try:
+
                 with open(json_path, "w", encoding="utf-8") as file:
                     json.dump({
                         "user_id": response["user_id"],
@@ -94,20 +106,23 @@ def bindToAccount():
     except Exception as e:
         print("❌ Failed to contact server:", e)
 
-def generateHOTP():
+
+
+def generateTOTP():
 
     with open('OTPData.json', 'r', encoding='utf-8') as f:
         data = json.load(f)
 
     secret_key =data.get['secret_key']
-    counter = data.get['counter']
     user_id = data.get['user_id']
 
+    totp = TOTP(secret_key)
+    return (totp, user_id)
 
-    OCTP = HOTP(secret_key, counter)
-    return (OCTP, user_id)
-def HOTP(secret, counter, digits=6):
+
+def TOTP(secret, digits=6,time_step = 30):
     key = base64.b32decode(secret, True)
+    counter = int(time.time())
 
     # convert counter to 8 bytes
     counter_bytes = struct.pack(">Q", counter)
@@ -121,14 +136,21 @@ def HOTP(secret, counter, digits=6):
     otp = binary % (10 ** digits)
     return str(otp).zfill(digits)  # make sure that the length is 6 digits
 
-def verity():
-    OTP,user_id = generateHOTP()
 
-    print("your OTP: %s",OTP)
+def login():
+    OTP,user_id = generateTOTP()
 
+    login_totp(OTP,user_id)
 
+    i = 0;
+    while(i <= 30):
+        print(f"now you can sign-in on the client, The validity time is {30 - i} seconds left.")
+        time.sleep(1)
+        i += 1
 
-
+        if isChecked:
+            print("The verification has been completed.")
+            break
 
 
 
@@ -142,10 +164,11 @@ if __name__ == '__main__':
 
 
         else:
-            user_choice =input("do you want to get one-time password?(Y/N)")
+            user_choice =input("do you want to login on the client? (Y/N)")
 
             if user_choice == "Y":
-                verity()
+                isChecked = False
+                login()
             else:
                 continue
             

@@ -25,28 +25,28 @@ def getUserByName(username):
         cursor.close()
         conn.close()  # Make sure to close the connection
 
-def increaseOTPCounter(username):
+def getUserSecretByID(userID):
     conn = get_db_connection()
-    
-    if conn is None: #database fail to connect
-        return False
+
+    if conn is None:#database fail to connect
+        return None
 
     try:
         cursor = conn.cursor()
-        query = "UPDATE users SET OTP_counter = OTP_counter + 1 WHERE username = %s"
-        cursor.execute(query, (username,))
-        conn.commit()
+        query = "SELECT secret_key FROM users WHERE user_id = %s"  # Use parameterized query
+        cursor.execute(query, (userID,))  # Note that the second parameter needs to be tuple.
+        result = cursor.fetchone()  # Take only one row
+        return result
 
-        if cursor.rowcount > 0:
-            print(f"OTP_counter increased for {username}")
-            return True # indicate successful update
-        else:
-            print(f" No user found with username: {username}")
-            return False  # no user is found
+    except mysql.connector.Error as err:
+        print(f"❌ Query failed: {err}")
+        return None
 
     finally:
         cursor.close()
-        conn.close()
+        conn.close()  # Make sure to close the connection
+
+
 
 def bindDeviceByUserID(deviceID,user_id):
     conn = get_db_connection()
@@ -104,6 +104,7 @@ def get_user_and_increaseOTPCounter(user_id):
     finally:
         cursor.close()
         conn.close()
+
 
 
 def execute_query(conn, query, params=None):

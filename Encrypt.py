@@ -3,24 +3,28 @@ import base64
 import hmac
 import hashlib
 import struct
+import time
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 
-def HOTP(secret, counter, digits=6):
-        key = base64.b32decode(secret, True)
+# create a OTP with the current time.
+def TOTP(secret, digits=6,time_step = 30):
+    key = base64.b32decode(secret, True)
+    counter = int(time.time())
 
-        #convert counter to 8 bytes
-        counter_bytes = struct.pack(">Q", counter)
-        # HMAC-SHA1
-        hmac_hash = hmac.new(key, counter_bytes, hashlib.sha1).digest()
+    # convert counter to 8 bytes
+    counter_bytes = struct.pack(">Q", counter)
+    # HMAC-SHA1
+    hmac_hash = hmac.new(key, counter_bytes, hashlib.sha1).digest()
 
-        #get the offset
-        offset = hmac_hash[-1] & 0x0F
+    # get the offset
+    offset = hmac_hash[-1] & 0x0F
 
-        binary = struct.unpack(">I", hmac_hash[offset:offset+4])[0] & 0x7FFFFFFF  #take 31-bit
-        otp = binary % (10 ** digits)
-        return str(otp).zfill(digits)  # make sure that the length is 6 digits
+    binary = struct.unpack(">I", hmac_hash[offset:offset + 4])[0] & 0x7FFFFFFF  # take 31-bit
+    otp = binary % (10 ** digits)
+    return str(otp).zfill(digits)  # make sure that the length is 6 digits
+
 
 def generate_key_pair():
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)

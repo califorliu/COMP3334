@@ -35,15 +35,14 @@ def register_user(username, password):
 
     password_hash = hash_password(password)
     secret_key = base64.b32encode(secrets.token_bytes(10)).decode("utf-8")
-    counter = 0
 
     private_bytes, public_bytes = Encrypt.generate_key_pair()
     private_b64 = base64.b64encode(private_bytes).decode("utf-8")
     public_b64 = base64.b64encode(public_bytes).decode("utf-8")
 
     execute_insert(conn,
-        "INSERT INTO users (username, password_hash, OTP_counter, secret_key) VALUES (%s, %s, %s, %s, %s)",
-        (username, password_hash, secret_key, counter, public_bytes.decode("utf-8")))
+        "INSERT INTO users (username, password_hash, secret_key) VALUES (%s, %s, %s, %s)",
+        (username, password_hash, secret_key, public_bytes.decode("utf-8")))
 
     result = execute_query(conn, "SELECT user_id FROM users WHERE username = %s", (username,))
     user_id = result[0][0] if result else None
@@ -51,7 +50,7 @@ def register_user(username, password):
 
     main_obj.bindAccount_queue.append({
         "user_id": user_id, "secret_key": secret_key,
-        "counter": counter, "code": bind_code
+        "code": bind_code
     })
 
     return {
@@ -74,6 +73,7 @@ def login_user(username, password):
     set_user_token(user_id, token)
     main_obj.generateHOTP(user_id)
     return {"status": "success", "token": token, "user_id": user_id}
+
 
 def reset_password(user_id, token, old_password, new_password):
     if not validate_session(user_id, token):
@@ -126,6 +126,7 @@ def handle_connect():
     connected_clients[sid] = request.remote_addr
     print(f"Client {sid} connected.")
 
+
 @socketio.on("register_device")
 def handle_register_device(data):
     username = data["username"]
@@ -137,9 +138,9 @@ def handle_register_device(data):
     print(f"✅ {username} registered {device_type} with sid {sid}")
     emit("register_ack", {"status": "success", "device": device_type})
 
-@socketio.on("OTP_bind")
-def handle_otp_bind(data):
-    print("📥 Received OTP_bind with code:", data)
+@socketio.on("HOTP_bind")
+def handle_hotp_bind(data):
+    print("📥 Received HOTP_bind with code:", data)
     print("📋 Current bindAccount_queue:", main_obj.bindAccount_queue)
 
     code_str = data.get("code")
@@ -153,7 +154,7 @@ def handle_otp_bind(data):
         # Convert to integer, removing any leading/trailing whitespace
         code = int(str(code_str).strip())
     except (ValueError, TypeError):
-        print("❌ Invalid OTP code format received:", code_str)
+        print("❌ Invalid HOTP code format received:", code_str)
         return {"status": "failed", "message": "Invalid code format"}
 
     # Get user_id and secret_key from queue
@@ -178,7 +179,18 @@ def handle_otp_bind(data):
     else:
         print(f"❌ Code {code} not found in bindAccount_queue")
         return {"status": "failed", "message": "Invalid or expired binding code"}
-    
+
+@socketio.on("login_hotp")
+async def handle_login_hotp(data):
+    result = await main_obj.verity_user_TOTP(data.get("OTP"),data.get("user_id"))
+
+    if result:
+        emit("login_ack", {"status": "success"})
+    else:
+        emit("login_ack", {"status": "failed"})
+
+
+
 if __name__ == "__main__":
     cert_path = os.path.join("certs", "cert.pem")
     key_path = os.path.join("certs", "key.pem")
