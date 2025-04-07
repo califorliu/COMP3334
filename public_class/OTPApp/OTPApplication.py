@@ -95,7 +95,6 @@ def bindToAccount():
                     json.dump({
                         "user_id": response["user_id"],
                         "secret_key": response["secret_key"],
-                        "counter": 0,
                         "deviceID": deviceID
                     }, file, indent=4)
                 print("✅ JSON successfully written to:", json_path)
