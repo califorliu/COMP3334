@@ -4,7 +4,7 @@ import urllib3
 import json
 from public_class import otp_interface
 from public_class.Config_mysql import get_db_connection
-from public_class.SQL_method import execute_query
+from public_class.SQL_method import execute_query, execute_insert
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -102,6 +102,12 @@ def login():
 
                 with open(otp_path, "w", encoding="utf-8") as f:
                     json.dump(otp_data, f, indent=4)
+
+                # Update device_ID and session_token in the database
+                device_id = otp_data.get("deviceID", "")
+                execute_insert(conn, 
+                    "UPDATE users SET device_ID = %s, session_token = %s WHERE user_id = %s",
+                    (device_id, session["token"], user_id))
             except Exception:
                 pass
             finally:
