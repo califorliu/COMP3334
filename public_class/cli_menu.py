@@ -1,12 +1,14 @@
 import os
 import requests
 import urllib3
-import otp_interface
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-import base64
+import json
+from public_class import otp_interface
+from public_class.Config_mysql import get_db_connection
+from public_class.SQL_method import execute_query
 
-API_BASE = "https://localhost:5050"
-cert_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "cert.pem"))
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+API_BASE = "https://127.0.0.1:5050"
 
 session = {
     "token": None,
@@ -25,11 +27,124 @@ def main_menu():
     print("8. Logout")
     print("9. OTP Operations")
     print("0. Exit")
-    return input("Choose an option (0-8): ")
+    return input("Choose an option (0-9): ")
+
+def register():
+    username = input("Username: ")
+    password = input("Password: ")
+    res = requests.post(f"{API_BASE}/register", json={"username": username, "password": password}, verify=False)
+    data = res.json()
+
+    if data.get("status") == "success":
+        print("[System meessage] User registered successfully.")
+        user_id = data.get("user_id")
+        secret_key_OTP = data.get("secret_key_OTP")
+
+        # Update OTPData.json with user_id and secret_key_OTP
+        otp_path = os.path.join(os.path.dirname(__file__), "OTPApp", "OTPData.json")
+        try:
+            if not os.path.exists(os.path.dirname(otp_path)):
+                return
+
+            if os.path.exists(otp_path):
+                with open(otp_path, "r", encoding="utf-8") as f:
+                    otp_data = json.load(f)
+            else:
+                otp_data = {"deviceID": ""}
+
+            otp_data["user_id"] = user_id
+            otp_data["secret_key"] = secret_key_OTP
+
+            with open(otp_path, "w", encoding="utf-8") as f:
+                json.dump(otp_data, f, indent=4)
+        except Exception:
+            pass
+    else:
+        print("[System meessage] Registration failed:", data.get("message"))
+
+def login():
+    username = input("Username: ")
+    password = input("Password: ")
+    res = requests.post(
+        f"{API_BASE}/login",
+        json={"username": username, "password": password},
+        verify=False
+    )
+
+    try:
+        data = res.json()
+        if data.get("status") == "success":
+            session["token"] = data["token"]
+            session["user_id"] = data["user_id"]
+
+            # Fetch secret_key_OTP from the database to ensure sync
+            conn = get_db_connection()
+            result = execute_query(conn, "SELECT user_id, secret_key_OTP FROM users WHERE user_id = %s", (session["user_id"],))
+            if result:
+                user_id, secret_key_OTP = result[0]
+            else:
+                return
+
+            # Update OTPData.json with user_id and secret_key_OTP
+            otp_path = os.path.join(os.path.dirname(__file__), "OTPApp", "OTPData.json")
+            try:
+                if not os.path.exists(os.path.dirname(otp_path)):
+                    return
+
+                if os.path.exists(otp_path):
+                    with open(otp_path, "r", encoding="utf-8") as f:
+                        otp_data = json.load(f)
+                else:
+                    otp_data = {"deviceID": ""}
+
+                otp_data["user_id"] = user_id
+                otp_data["secret_key"] = secret_key_OTP
+
+                with open(otp_path, "w", encoding="utf-8") as f:
+                    json.dump(otp_data, f, indent=4)
+            except Exception:
+                pass
+            finally:
+                if conn:
+                    conn.close()
+            print("[System meessage] Login successful!")
+        else:
+            print("[System meessage] Login failed:", data.get("message"))
+    except Exception:
+        pass
+
+def reset_password():
+    if not session["token"]:
+        print("[System meessage] Please login first!")
+        return
+
+    old_password = input("Old password: ")
+    new_password = input("New password: ")
+
+    res = requests.post(f"{API_BASE}/reset_password", json={
+        "user_id": session["user_id"],
+        "token": session["token"],
+        "old_password": old_password,
+        "new_password": new_password
+    }, verify=False)
+
+    try:
+        print(res.json())
+    except Exception:
+        pass
+
+def logout():
+    if not session["token"]:
+        print("[System meessage] You are not logged in.")
+        return
+    res = requests.post(f"{API_BASE}/logout", json={"user_id": session["user_id"], "token": session["token"]}, verify=False)
+    print(res.json())
+    session["token"] = None
+    session["user_id"] = None
 
 def otp_menu():
     if not otp_interface.is_otp_available():
-        print("❌ OTP system is not integrated.")
+        print("[System meessage] OTP system is not integrated.")
         return
 
     print("\n=== OTP Menu ===")
@@ -46,86 +161,9 @@ def otp_menu():
     elif option == "3":
         user_input = input("Enter OTP: ")
         if otp_interface.verify_otp(user_input):
-            print("✅ OTP verified!")
+            print("[System meessage] OTP verified!")
         else:
-            print("❌ OTP invalid!")
-
-def register():
-    username = input("Username: ")
-    password = input("Password: ")
-
-    res = requests.post(f"{API_BASE}/register", json={"username": username, "password": password}, verify=False)
-    data = res.json()
-
-    if data.get("status") == "success":
-        private_key_bytes = base64.b64decode(data["private_key"])
-        public_key_bytes = base64.b64decode(data["public_key"])
-
-        user_dir = os.path.join(os.path.dirname(__file__), "user_keys", username)
-        os.makedirs(user_dir, exist_ok=True)
-
-        with open(os.path.join(user_dir, "private.pem"), "wb") as f:
-            f.write(private_key_bytes)
-
-        with open(os.path.join(user_dir, "public.pem"), "wb") as f:
-            f.write(public_key_bytes)
-
-        print(f"✅ RSA key pair saved to: {user_dir}")
-        print("🆔 One-time binding code:", data["bind_code"])
-    else:
-        print("❌ Registration failed:", data.get("message"))
-        
-def login():
-    username = input("Username: ")
-    password = input("Password: ")
-    res = requests.post(
-        f"{API_BASE}/login",
-        json={"username": username, "password": password},
-        verify=False
-    )
-
-    try:
-        data = res.json()
-        if data.get("status") == "success":
-            session["token"] = data["token"]
-            session["user_id"] = data["user_id"]
-        print(data)
-    except Exception as e:
-        print("❌ Failed to parse JSON:", e)
-
-
-def reset_password():
-    if not session["token"]:
-        print("❌ Please login first!")
-        return
-
-    old_password = input("Old password: ")
-    new_password = input("New password: ")
-
-    res = requests.post(f"{API_BASE}/reset_password", json={
-        "user_id": session["user_id"],
-        "token": session["token"],
-        "old_password": old_password,
-        "new_password": new_password
-    }
-    ,verify=False)
-
-    try:
-        print(res.json())
-    except Exception as e:
-        print("❌ Error parsing server response:", e)
-        print("📥 Response content:", res.text)
-
-
-
-def logout():
-    if not session["token"]:
-        print("❌ You are not logged in.")
-        return
-    res = requests.post(f"{API_BASE}/logout", json={"user_id": session["user_id"], "token": session["token"]} ,verify=False)
-    print(res.json())
-    session["token"] = None
-    session["user_id"] = None
+            print("[System meessage] OTP invalid!")
 
 def cli_loop():
     while True:
@@ -135,23 +173,24 @@ def cli_loop():
         elif option == "2":
             login()
         elif option == "3":
-            print("[Upload File] feature not implemented yet.")
+            print("[System meessage] Upload File feature not implemented yet.")
         elif option == "4":
-            print("[Download File] feature not implemented yet.")
+            print("[System meessage] Download File feature not implemented yet.")
         elif option == "5":
-            print("[Share File] feature not implemented yet.")
+            print("[System meessage] Share File feature not implemented yet.")
         elif option == "6":
-            print("[View Logs] feature not implemented yet.")
+            print("[System meessage] View Logs feature not implemented yet.")
         elif option == "7":
             reset_password()
         elif option == "8":
             logout()
         elif option == "9":
-            otp_menu() 
+            otp_menu()
         elif option == "0":
             print("Bye!")
             break
         else:
-            print("Invalid option. Please try again.")
+            print("[System meessage] Invalid option. Please try again.")
+
 if __name__ == "__main__":
     cli_loop()

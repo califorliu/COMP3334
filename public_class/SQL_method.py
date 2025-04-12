@@ -1,111 +1,89 @@
-import mysql
+import mysql.connector
 
 from .Config_mysql import get_db_connection
 
-
 def getUserByName(username):
     conn = get_db_connection()
-
-    if conn is None:#database fail to connect
+    if conn is None:
         return None
-
 
     try:
         cursor = conn.cursor()
-        query = "SELECT * FROM users WHERE username = %s"  # Use parameterized query
-        cursor.execute(query, (username,))  # Note that the second parameter needs to be tuple.
-        result = cursor.fetchone()  # Take only one row
+        query = "SELECT * FROM users WHERE username = %s"
+        cursor.execute(query, (username,))
+        result = cursor.fetchone()
         print(result)
         return result
-
     except mysql.connector.Error as err:
         print(f"❌ Query failed: {err}")
         return None
     finally:
         cursor.close()
-        conn.close()  # Make sure to close the connection
+        conn.close()
 
 def getUserSecretByID(userID):
     conn = get_db_connection()
-
-    if conn is None:#database fail to connect
+    if conn is None:
         return None
 
     try:
         cursor = conn.cursor()
-        query = "SELECT secret_key FROM users WHERE user_id = %s"  # Use parameterized query
-        cursor.execute(query, (userID,))  # Note that the second parameter needs to be tuple.
-        result = cursor.fetchone()  # Take only one row
+        query = "SELECT secret_key_OTP FROM users WHERE user_id = %s"
+        cursor.execute(query, (userID,))
+        result = cursor.fetchone()
         return result
-
     except mysql.connector.Error as err:
         print(f"❌ Query failed: {err}")
         return None
-
     finally:
         cursor.close()
-        conn.close()  # Make sure to close the connection
+        conn.close()
 
-
-
-def bindDeviceByUserID(deviceID,user_id):
+def bindDeviceByUserID(deviceID, user_id):
     conn = get_db_connection()
-    
-    if conn is None: #database fail to connect
+    if conn is None:
         return False
 
     try:
         cursor = conn.cursor()
         query = "UPDATE users SET device_ID = %s WHERE user_id = %s"
-        cursor.execute(query, (deviceID,user_id,))
+        cursor.execute(query, (deviceID, user_id))
         conn.commit()
 
         if cursor.rowcount > 0:
-            return True # indicate successful update
+            return True
         else:
-            print(f" No user found with user_id: {user_id}")
-            return False 
-
+            print(f"No user found with user_id: {user_id}")
+            return False
     finally:
         cursor.close()
         conn.close()
 
-
-#this method has been abandoned.
 def get_user_and_increaseOTPCounter(user_id):
     conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
-        update_query = """
-            UPDATE users 
-            SET OTP_counter = OTP_counter + 1 
-            WHERE user_id = %s
-        """
+        update_query = "UPDATE users SET OTP_counter = IFNULL(OTP_counter, 0) + 1 WHERE user_id = %s"
         cursor.execute(update_query, (user_id,))
         conn.commit()
 
-        select_query = """
-            SELECT * FROM users WHERE user_id = %s
-        """
+        select_query = "SELECT secret_key_OTP, OTP_counter FROM users WHERE user_id = %s"
         cursor.execute(select_query, (user_id,))
-        user = cursor.fetchone()
+        row = cursor.fetchone()
 
-        if user:
-            return user
+        if row:
+            secret_key, counter = row[0], row[1]
+            return secret_key, counter
         else:
             print("❌ No user found after update.")
             return None
-
-    except mysql.connector.Error as err:
-        print(f"❌ SQL error: {err}")
+    except Exception as e:
+        print(f"❌ SQL error: {e}")
         return None
-
     finally:
         cursor.close()
         conn.close()
-
-
 
 def execute_query(conn, query, params=None):
     try:
