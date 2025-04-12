@@ -2,7 +2,7 @@ import mysql.connector
 
 
 DB_CONFIG = {
-    "host": "192.168.31.189",
+    "host": "42.3.154.23",
     "user": "admin",
     "password": "abcd123456789",
     "database": "comp3334",
