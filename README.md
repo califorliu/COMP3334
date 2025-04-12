@@ -47,28 +47,30 @@ pip install -r requirements.txt
 ### 2. Start the Server
 
 ```bash
-python server.py
+python3 server.py
 ```
 This will run the Flask server at https://127.0.0.1:5050 with SSL enabled.
 
 ### 3. Run the CLI Client
 ```bash
 cd public_class
-python cli_menu.py
+python3 -m public_class.cli_menu
 ```
+Create account and login in
 
 ### 4. Run the OTP Application
 ```bash
-python OTPApplication.py
+python3 OTPApplication.py
 ```
+enter y to complete OTP login
+Check CLI client
+
 ### Example Usage
 Run server.py
 
 Open CLI (cli_menu.py)
 
 Register new user
-
-Keys saved locally in public_class/user_keys/{username}/
 
 Run OTPApplication.py
 
