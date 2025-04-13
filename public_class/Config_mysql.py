@@ -14,8 +14,8 @@ def get_db_connection():
     try:
         conn = mysql.connector.connect(**DB_CONFIG)
         if conn.is_connected():
-            print("✅ database connect success")
+            #print("[System meessage]database connect success")
             return conn
     except mysql.connector.Error as err:
-        print(f"❌ failed:{err}")
+        #print(f"[System meessage] failed:{err}")
         return None  # Returning None means that the connection failed.

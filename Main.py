@@ -49,7 +49,7 @@ class Main:
     #     "user_id": int,             # ID of the user
     #     "HTOP": str           # List of 5 OTPs (2 before, current counter, and 2 after current counter)
     # }
-    queue_HOTP = []
+    queue_TOTP = []
 
 
     logged_in_users = []
@@ -59,28 +59,27 @@ class Main:
     # due to each client and server having its own counter, to improve fault tolerance, calculate the counters from the 2 before, current counter and after 2 counter.
     @classmethod
     def generateTOTP(cls, user_id: int):
-        secret_key = SQL_method.getUserSecretByID(user_id)
-        if not secret_key:
-            print("❌ Failed to get user counter info.")
+        secret_result = SQL_method.getUserSecretByID(user_id)
+        if not secret_result or not secret_result[0]:
+            print("❌ Failed to get secret key from DB.")
             return
 
-        htop = TOTP(secret_key)
+        secret_key = secret_result[0]  # string-only (computing)
 
-        HTOP_entry = {
+        hotp = Encrypt.TOTP(secret_key)  # TOTP changed every 30 seconds
+        entry = {
             "user_id": user_id,
-            "HTOP": htop
+            "HTOP": [hotp]  # Wrap it in a list to make the logic of the comparison universal.
         }
 
-        cls.queue_HOTP.append(HTOP_entry)
-        print(f"✅ OTPs generated and queued for user {user_id}")
-
-
+        cls.queue_TOTP.append(entry)
+        print(f"✅ TOTP queued for user {user_id}: {hotp}")
 
     # check if OTP_fromMobile is in the queue_OTP queue.
     # if yes, return true(user login success). otherwise byebye.
     @classmethod
     def verity_user_TOTP(cls, OTP_fromMobile: str, user_id: int):
-        for entry in cls.queue_HOTP:
+        for entry in cls.queue_TOTP:
             if entry["user_id"] != user_id: continue;
 
             if OTP_fromMobile in entry["HTOP"]:

@@ -9,21 +9,16 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 
 # create a OTP with the current time.
-def TOTP(secret, digits=6,time_step = 30):
+def TOTP(secret, digits=6, time_step=30):
     key = base64.b32decode(secret, True)
-    counter = int(time.time())
-
-    # convert counter to 8 bytes
+    counter = int(time.time() // time_step)
     counter_bytes = struct.pack(">Q", counter)
-    # HMAC-SHA1
     hmac_hash = hmac.new(key, counter_bytes, hashlib.sha1).digest()
-
-    # get the offset
     offset = hmac_hash[-1] & 0x0F
-
-    binary = struct.unpack(">I", hmac_hash[offset:offset + 4])[0] & 0x7FFFFFFF  # take 31-bit
+    binary = struct.unpack(">I", hmac_hash[offset:offset + 4])[0] & 0x7FFFFFFF
     otp = binary % (10 ** digits)
-    return str(otp).zfill(digits)  # make sure that the length is 6 digits
+    return str(otp).zfill(digits)
+
 
 
 def generate_key_pair():
