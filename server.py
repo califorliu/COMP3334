@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_socketio import SocketIO, emit
 import hashlib
 import secrets
@@ -100,6 +100,51 @@ def reset_password(user_id, token, old_password, new_password):
     execute_insert(conn, "UPDATE users SET password_hash = %s WHERE user_id = %s", (password_hash, user_id))
     return {"status": "success"}
 
+def execute_query(conn, query, params=None):
+    with conn.cursor() as cursor:
+        cursor.execute(query, params or ())
+        if query.strip().lower().startswith('select'):
+            # Get column names from cursor description
+            columns = [desc[0] for desc in cursor.description]
+            results = cursor.fetchall()
+            return columns, results
+        conn.commit()
+    return None
+
+def view_file_list(user_id, token):
+    if not validate_session(user_id, token):
+        return {"status": "error", "message": "Invalid session."}
+    
+    try:
+        with get_db_connection() as conn:  # Assuming you have connection pooling
+            columns, data = execute_query(
+                conn,
+                "SELECT file_id, file_name, upload_time FROM files WHERE user_id = %s",
+                (user_id,)
+            )
+            
+            if not data:
+                return {'error': 'No files found', 'status': 404}
+            
+            return {
+                'count': len(data),
+                'files': [dict(zip(columns, row)) for row in data]
+            }
+            
+    except Exception as e:
+        return {'error': str(e), 'status': 500}
+    
+def share_to_target(user_id, token, target_id, filename, share_key, share_iv):
+    if not validate_session(user_id, token):
+        return {"status": "error", "message": "Invalid session."}
+    try:
+        conn = get_db_connection()
+        execute_insert(conn,
+                    "INSERT INTO files (file_name, user_id, encrypted_path, hash) VALUES (%s, %s, %s, %s)",
+                    (filename, target_id,share_key,share_iv))
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
 # --- REST API Routes ---
 @app.route("/register", methods=["POST"])
 def register(): return jsonify(register_user(**request.json))
@@ -136,6 +181,73 @@ def verify_otp():
             main_obj.logged_in_users.append(user_id)
             return jsonify({"status": "success"})
     return jsonify({"status": "failed", "message": "Invalid OTP or user_id"})
+
+@app.route('/filelist', methods=["POST"])
+def file_list():
+    data = request.json
+    return jsonify(view_file_list(data["user_id"], data["token"]))
+
+@app.route('/download', methods=["POST"])
+def down_file():
+    data = request.json
+    
+    if not validate_session(data["user_id"], data["token"]):
+        return {"status": "error", "message": "Invalid session."}
+        
+    return send_from_directory(
+        app.config['UPLOAD_FOLDER'],
+        data["filename"],
+        as_attachment=True
+    )
+
+
+@app.route('/upload', methods=['GET', 'POST'])
+def upload_file():
+    data = request.json
+    if not validate_session(data["user_id"], data["token"]):
+        return {"status": "error", "message": "Invalid session."}
+    if request.method == 'POST':
+        # Check if file exists in request
+        if 'file' not in request.files:
+            return 'No file part in request', 400
+            
+        file = request.files['file']
+        filename= file.filename
+        # Check if file is selected
+        if filename == '':
+            return 'No selected file', 400
+            
+        # Validate file type
+        if file:
+            # Secure filename to prevent path traversal
+            # filename = secure_filename(file.filename)
+            # Save file to upload folder
+            try:
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                conn = get_db_connection()
+                execute_insert(conn,
+                    "INSERT INTO files (file_name, user_id) VALUES (%s, %s)",
+                    (filename, data["user_id"]))
+                return f'File {filename} uploaded successfully'
+            except Exception as e:
+                return jsonify({"status": "error", "message": str(e)})
+
+@app.route('/share', methods=["POST"])
+def share():
+    data = request.json
+    return jsonify(share_to_target(data["user_id"], data["token"],data["target"],data["filename"],data["share_key"],data["share_iv"]))
+
+@app.route('/get_public_key', methods=["POST"])
+def get_public_key():
+    data = request.json
+    try:
+        conn = get_db_connection()
+        result = execute_query(conn, "SELECT  FROM key WHERE user_id = %s", (data["target"],))
+        return result[0][0]
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+
 
 @app.route("/")
 def index(): return "🔒 Unified Secure Server Running with WebSocket + HTTPS"

@@ -5,6 +5,8 @@ import json
 from public_class import otp_interface
 from public_class.Config_mysql import get_db_connection
 from public_class.SQL_method import execute_query, execute_insert
+from public_class import encryption_algo
+from tabulate import tabulate
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -171,6 +173,104 @@ def otp_menu():
         else:
             print("[System meessage] OTP invalid!")
 
+def upload():
+    if not session["token"]:
+        print("[System meessage] You are not logged in.")
+        return
+    file_path = input("File path > ")
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
+    
+    # Get filename from path
+    filename = os.path.basename(file_path)
+    enc_filename = "enc_"+filename
+    
+    try:
+        key, iv = encryption_algo.skc_generatekey()
+        encryption_algo.save_iv_to_file(iv, filename+"iv.txt")
+        encryption_algo.save_key_to_file(key,filename+"key.txt")
+        encryption_algo.skc_encrypt(file_path,enc_filename,key,iv)
+        with open(enc_filename, 'rb') as f:
+            files = {'file': (enc_filename, f)}
+
+            res = requests.post(f"{API_BASE}/upload", json={
+                    "user_id": session["user_id"],
+                    "token": session["token"],
+                }, files=files, verify=False)
+        
+        if res.status_code == 200:
+            return f"Success: {res.text}"
+        else:
+            return f"Error {res.status_code}: {res.text}"
+    
+    except Exception as e:
+        return f"Upload failed: {str(e)}"
+    
+def download():
+    if not session["token"]:
+        print("[System meessage] You are not logged in.")
+        return
+    res = requests.post(f"{API_BASE}/filelist", json={
+        "user_id": session["user_id"],
+        "token": session["token"],
+    }, verify=False)
+    
+    print(res.json())
+
+    # headers = ["File_ID", "File name", "Upload Time"]
+    # d=res.files
+    # print(tabulate(d.items(), headers = headers))
+
+    full_file_name = input("Download File Name >")
+    file_name= full_file_name.split('_', 1 )[1]
+    res = requests.post(f"{API_BASE}/download", json={
+        "user_id": session["user_id"],
+        "token": session["token"],
+        "file_name": full_file_name,
+    }, verify=False)
+    encryption_algo.skc_decrypt(
+        full_file_name, "dec_"+file_name, 
+        encryption_algo.load_key_from_file(file_name+"key.txt"), 
+        encryption_algo.load_iv_from_file(file_name+"iv.txt")
+    )
+
+def share_file():
+    if not session["token"]:
+        print("[System meessage] You are not logged in.")
+        return
+    res = requests.post(f"{API_BASE}/filelist", json={
+        "user_id": session["user_id"],
+        "token": session["token"],
+    }, verify=False)
+    
+    print(res.json())
+    file_name = input("Share File Name >")
+    target=input("Share Target user id: ")
+
+    target_public_key=requests.post(f"{API_BASE}/get_public_key", json={
+        "user_id": session["user_id"],
+        "token": session["token"],
+        "target": target,
+    }, verify=False)
+    
+    ori_file_name= file_name.split('_', 1 )[1]
+    key=encryption_algo.load_key_from_file(ori_file_name+"key.txt"), 
+    iv=encryption_algo.load_iv_from_file(ori_file_name+"iv.txt")
+
+
+    share_key=encryption_algo.pkc_encrypt(key,target_public_key)
+    share_iv=encryption_algo.pkc_encrypt(iv,target_public_key)
+
+    res = requests.post(f"{API_BASE}/share/", json={
+        "user_id": session["user_id"],
+        "token": session["token"],
+        "target": target,
+        "file_name": file_name,
+        "share_key":share_key,
+        "share_iv":share_iv,
+    }, verify=False)
+    return
+
 def cli_loop():
     while True:
         option = main_menu()
@@ -179,11 +279,11 @@ def cli_loop():
         elif option == "2":
             login()
         elif option == "3":
-            print("[System meessage] Upload File feature not implemented yet.")
+            upload()
         elif option == "4":
-            print("[System meessage] Download File feature not implemented yet.")
+            download()
         elif option == "5":
-            print("[System meessage] Share File feature not implemented yet.")
+            share_file()
         elif option == "6":
             print("[System meessage] View Logs feature not implemented yet.")
         elif option == "7":
