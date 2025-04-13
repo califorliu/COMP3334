@@ -2,6 +2,8 @@ import os
 import requests
 import urllib3
 import json
+import random
+
 from public_class import otp_interface
 from public_class.Config_mysql import get_db_connection
 from public_class.SQL_method import execute_query, execute_insert
@@ -32,13 +34,17 @@ def main_menu():
 def register():
     username = input("Username: ")
     password = input("Password: ")
-    res = requests.post(f"{API_BASE}/register", json={"username": username, "password": password}, verify=False)
+
+    #Users need to enter this code in the OTP app to bind.
+    code = random.randint(10000, 99999)
+    print("this your code, please input on the OTP app to bind your account: ", code)
+
+    res = requests.post(f"{API_BASE}/register", json={"username": username, "password": password,"bindCode":code}, verify=False)
     data = res.json()
 
     if data.get("status") == "success":
         print("[System meessage] User registered successfully.")
         user_id = data.get("user_id")
-        secret_key_OTP = data.get("secret_key_OTP")
 
         # Update OTPData.json with user_id and secret_key_OTP
         otp_path = os.path.join(os.path.dirname(__file__), "OTPApp", "OTPData.json")
@@ -53,7 +59,6 @@ def register():
                 otp_data = {"deviceID": ""}
 
             otp_data["user_id"] = user_id
-            otp_data["secret_key"] = secret_key_OTP
 
             with open(otp_path, "w", encoding="utf-8") as f:
                 json.dump(otp_data, f, indent=4)
@@ -149,14 +154,9 @@ def logout():
     session["user_id"] = None
 
 def otp_menu():
-    if not otp_interface.is_otp_available():
-        print("[System meessage] OTP system is not integrated.")
-        return
 
     print("\n=== OTP Menu ===")
     print("1. Bind to Device")
-    print("2. Generate OTP")
-    print("3. Verify OTP")
     option = input("Choose: ")
 
     if option == "1":
@@ -170,6 +170,8 @@ def otp_menu():
             print("[System meessage] OTP verified!")
         else:
             print("[System meessage] OTP invalid!")
+
+
 
 def cli_loop():
     while True:

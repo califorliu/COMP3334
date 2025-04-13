@@ -7,10 +7,13 @@ import hashlib
 import struct
 import requests
 from datetime import datetime
+import secrets
 
 # Initialize a requests session with SSL verification disabled
 session = requests.Session()
 session.verify = False  # Ignore SSL verification (for testing only)
+
+url = "https://127.0.0.1:5050/verify_otp"
 
 # Generate a TOTP (HMAC-based One-Time Password)
 def TOTP(secret, digits=6, time_step=30):
@@ -23,42 +26,128 @@ def TOTP(secret, digits=6, time_step=30):
     otp = binary % (10 ** digits)
     return str(otp).zfill(digits)
 
+def check_otp_data():
+    json_path = os.path.join(os.path.dirname(__file__), "OTPData.json")
+
+    #if no json file
+    if not os.path.exists(json_path):
+        print("OTPData.json not found!")
+        return False
+
+    try:
+        with open(json_path, "r", encoding="utf-8") as file:
+            data = json.load(file)
+    except (json.JSONDecodeError, FileNotFoundError):
+        print("OTPData.json is not valid JSON!")
+        return False
+
+    if not data:
+        print("OTPData.json is empty!")
+        return False
+
+    modified = False
+    if "secret_key" not in data:
+        data["secret_key"] = ""
+        modified = True
+    if "user_id" not in data:
+        data["user_id"] = ""
+        modified = True
+
+
+    if modified:
+        with open(json_path, "w", encoding="utf-8") as file:
+            json.dump(data, file, indent=4)
+        print("✅ Fields added to JSON, but please retry.")
+        return False
+
+    return True
+
+def bindToAccount():
+    verity_code = input("No account is bound. Please input the code you see in desktop client: ").strip()
+    deviceID = ''.join(secrets.choice("0123456789") for _ in range(15))
+
+    payload = {
+        "code": verity_code,
+        "deviceID": deviceID
+    }
+
+    try:
+        response = session.post("https://127.0.0.1:5050/bind_device", json=payload)
+        result = response.json()
+
+        if result and result.get("status") == "success":
+            json_path = os.path.join(os.path.dirname(__file__), "OTPData.json")
+
+            try:
+                with open(json_path, "w", encoding="utf-8") as file:
+                    json.dump({
+                        "user_id": result["user_id"],
+                        "secret_key": result["secret_key_OTP"],
+                        "deviceID": deviceID
+                    }, file, indent=4)
+                print("✅ JSON successfully written to:", json_path)
+            except Exception as e:
+                print("❌ Failed to write JSON:", e)
+        else:
+            print("❌ Binding failed:", result.get("message", "Unknown error"))
+    except Exception as e:
+        print("❌ Failed to contact server:", e)
+
+
+
+
 # Submit OTP to the server
-def submit_otp(user_id, otp):
-    url = "https://127.0.0.1:5050/verify_otp"
-    payload = {"user_id": user_id, "otp": otp}
+def submit_otp(user_id, hotp):
+
+    payload = {"user_id": user_id, "hotp": hotp}
     print(f"Submitting OTP at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     response = session.post(url, json=payload)
-    return response.json()
+
+def getSecret():
+    json_path = os.path.join(os.path.dirname(__file__), "OTPData.json")
+    with open(json_path, 'r', encoding='utf-8') as f:
+        try:
+            data = json.load(f)
+        except json.JSONDecodeError:
+            print("❌ OTPData.json is empty or invalid!")
+            return None
+    secret_key = data.get("secret_key")
+    user_id = data.get("user_id")
+
+    if not secret_key or not user_id:
+        print("❌ Missing required OTP data. Goodbye!")
+        return None
+
+    return secret_key, user_id
+
 
 # Main execution loop
 def main():
-    json_path = os.path.join(os.path.dirname(__file__), "OTPData.json")
-    with open(json_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    secret_key = data.get("secret_key")
-    user_id = data.get("user_id")
-    
-    if not user_id or not secret_key:
-        print("❌ OTPData.json is missing user_id or secret_key")
-        return
-    
-    print(f"OTP App started with user_id: {user_id}, secret_key: {secret_key}")
-    while True:
-        choice = input("Press [Y] to complete OTP login (or any other key to exit): ").strip().lower()
-        if choice == "y":
+
+
+    while (True):
+        # if the OTPapp does not register for a account
+        if not check_otp_data():
+            bindToAccount()
+
+        else:
+            user_choice = input("do you want to login on the client? (Y/N)").strip().lower()
+
+
+            if user_choice != "y": continue;
+
+            secret_key, user_id = getSecret()
             otp = TOTP(secret_key)
             print(f"Sending OTP for user_id {user_id} => {otp} at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            response = submit_otp(user_id, otp)
-            #print(f"Server response: {response}")
-            if response.get("status") == "success":
-                print("✅ OTP verification successful")
-                break
-            else:
-                print("❌ OTP verification failed")
-        else:
-            print("Exiting app")
-            break
+            submit_otp(user_id, otp)
+
+            for remaining in range(30, 0, -1):
+                print(f"⏳ You have {remaining} seconds remaining...")
+                time.sleep(1)
+
+
+
 
 if __name__ == "__main__":
     main()
+
