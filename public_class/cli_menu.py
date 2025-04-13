@@ -34,12 +34,18 @@ def main_menu():
 def register():
     username = input("Username: ")
     password = input("Password: ")
-    res = requests.post(f"{API_BASE}/register", json={"username": username, "password": password}, verify=False)
+
+    private_key,public_key=encryption_algo.pkc_generatekey()
+
+    res = requests.post(f"{API_BASE}/register", json={"username": username, "password": password, "public_key":public_key}, verify=False)
     data = res.json()
 
     if data.get("status") == "success":
         print("[System meessage] User registered successfully.")
         user_id = data.get("user_id")
+
+        encryption_algo.save_key_to_file(private_key,user_id+"private_key.txt")
+
         secret_key_OTP = data.get("secret_key_OTP")
 
         # Update OTPData.json with user_id and secret_key_OTP
@@ -210,6 +216,20 @@ def download():
     if not session["token"]:
         print("[System meessage] You are not logged in.")
         return
+    
+    key_res = requests.post(f"{API_BASE}/keylist", json={
+        "user_id": session["user_id"],
+        "token": session["token"],
+    }, verify=False)
+
+    user_id=session["user_id"]
+    private_key=encryption_algo.load_key_from_file(user_id+"private_key.txt")
+    for filename,key in key_res:
+        keycombine=encryption_algo.pkc_decrypt(key,private_key)
+        key,iv=keycombine.split("||")
+        encryption_algo.save_key_to_file(key,filename.split("_")[1]+"key.txt")
+        encryption_algo.save_key_to_file(iv,filename.split("_")[1]+"key.txt")
+
     res = requests.post(f"{API_BASE}/filelist", json={
         "user_id": session["user_id"],
         "token": session["token"],
@@ -257,9 +277,9 @@ def share_file():
     key=encryption_algo.load_key_from_file(ori_file_name+"key.txt"), 
     iv=encryption_algo.load_iv_from_file(ori_file_name+"iv.txt")
 
+    keycombine=key+"||"+iv
 
-    share_key=encryption_algo.pkc_encrypt(key,target_public_key)
-    share_iv=encryption_algo.pkc_encrypt(iv,target_public_key)
+    share_key=encryption_algo.pkc_encrypt(keycombine,target_public_key)
 
     res = requests.post(f"{API_BASE}/share/", json={
         "user_id": session["user_id"],
@@ -267,7 +287,6 @@ def share_file():
         "target": target,
         "file_name": file_name,
         "share_key":share_key,
-        "share_iv":share_iv,
     }, verify=False)
     return
 

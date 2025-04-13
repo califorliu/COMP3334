@@ -33,7 +33,7 @@ def validate_session(user_id, token):
 def revoke_token(user_id): user_tokens.pop(user_id, None)
 
 # --- User functions ---
-def register_user(username, password):
+def register_user(username, password, public_key):
     conn = get_db_connection()
     if execute_query(conn, "SELECT * FROM users WHERE username = %s", (username,)):
         return {"status": "error", "message": "Username already exists."}
@@ -50,7 +50,14 @@ def register_user(username, password):
         (username, password_hash, secret_key_OTP, None))
 
     result = execute_query(conn, "SELECT user_id FROM users WHERE username = %s", (username,))
-    user_id = result[0][0] if result else None
+    if result:
+        user_id = result[0][0]
+        execute_insert(conn,
+        "INSERT INTO keys (user_id, public_key) VALUES (%s, %s)",
+        (user_id, public_key))
+    else:
+        None
+    # user_id = result[0][0] if result else None
     return {
         "status": "success",
         "private_key": private_b64,
@@ -133,15 +140,37 @@ def view_file_list(user_id, token):
             
     except Exception as e:
         return {'error': str(e), 'status': 500}
+
+def view_key_list(user_id, token):
+    if not validate_session(user_id, token):
+        return {"status": "error", "message": "Invalid session."}
+    try:
+        with get_db_connection() as conn:  # Assuming you have connection pooling
+            columns, data = execute_query(
+                conn,
+                "SELECT file_name, encrypted_path FROM files WHERE user_id = %s AND encrypted_path IS NOT NULL",
+                (user_id)
+            )
+            
+            if not data:
+                return {'error': 'No files found', 'status': 404}
+            
+            return {
+                'count': len(data),
+                'files': [dict(zip(columns, row)) for row in data]
+            }
+            
+    except Exception as e:
+        return {'error': str(e), 'status': 500}
     
-def share_to_target(user_id, token, target_id, filename, share_key, share_iv):
+def share_to_target(user_id, token, target_id, filename, share_key):
     if not validate_session(user_id, token):
         return {"status": "error", "message": "Invalid session."}
     try:
         conn = get_db_connection()
         execute_insert(conn,
-                    "INSERT INTO files (file_name, user_id, encrypted_path, hash) VALUES (%s, %s, %s, %s)",
-                    (filename, target_id,share_key,share_iv))
+                    "INSERT INTO files (file_name, user_id, encrypted_path) VALUES (%s, %s, %s)",
+                    (filename, target_id,share_key))
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
 
@@ -186,6 +215,16 @@ def verify_otp():
 def file_list():
     data = request.json
     return jsonify(view_file_list(data["user_id"], data["token"]))
+
+@app.route('/keylist', methods=["POST"])
+def key_list():
+    data = request.json
+    return jsonify(view_key_list(data["user_id"], data["token"]))
+
+@app.route('/keylist', methods=["POST"])
+def key_list():
+    data = request.json
+    return jsonify(view_key_list(data["user_id"], data["token"]))
 
 @app.route('/download', methods=["POST"])
 def down_file():
@@ -235,14 +274,14 @@ def upload_file():
 @app.route('/share', methods=["POST"])
 def share():
     data = request.json
-    return jsonify(share_to_target(data["user_id"], data["token"],data["target"],data["filename"],data["share_key"],data["share_iv"]))
+    return jsonify(share_to_target(data["user_id"], data["token"],data["target"],data["filename"],data["share_key"]))
 
 @app.route('/get_public_key', methods=["POST"])
 def get_public_key():
     data = request.json
     try:
         conn = get_db_connection()
-        result = execute_query(conn, "SELECT  FROM key WHERE user_id = %s", (data["target"],))
+        result = execute_query(conn, "SELECT public_key FROM keys WHERE user_id = %s", (data["target"],))
         return result[0][0]
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
