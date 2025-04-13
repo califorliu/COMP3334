@@ -53,13 +53,13 @@ This will run the Flask server at https://127.0.0.1:5050 with SSL enabled.
 
 ### 3. Run the CLI Client
 ```bash
-cd public_class
 python3 -m public_class.cli_menu
 ```
 Create account and login in
 
 ### 4. Run the OTP Application
 ```bash
+cd public_class/OTPApp/
 python3 OTPApplication.py
 ```
 enter y to complete OTP login
